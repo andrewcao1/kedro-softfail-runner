@@ -87,7 +87,7 @@ class SoftFailRunner(SequentialRunner):
         self._summary(pipeline, skip_nodes, fail_nodes)
 
         if skip_nodes:
-            self._suggest_resume_scenario(pipeline, done_nodes)
+            self._suggest_resume_scenario(pipeline, done_nodes, catalog)
 
     def _update_skip_nodes(self, node, pipeline, skip_nodes=None) -> Set[Node]:
         """Traverse the DAG with Breath-First-Search (BFS) to find all descendent nodes.
@@ -149,7 +149,7 @@ class SoftFailRunner(SequentialRunner):
 
         # Check which datasets used in the pipeline are in the catalog or match
         # a pattern in the catalog
-        registered_ds = [ds for ds in pipeline.data_sets() if ds in catalog]
+        registered_ds = [ds for ds in pipeline.datasets() if ds in set(catalog.list())]
 
         # Check if there are any input datasets that aren't in the catalog and
         # don't match a pattern in the catalog.
@@ -161,9 +161,11 @@ class SoftFailRunner(SequentialRunner):
             )
 
         free_outputs = pipeline.outputs() - set(catalog.list())
-        unregistered_ds = pipeline.data_sets() - set(catalog.list())
-        for ds_name in unregistered_ds:
-            catalog.add(ds_name, self.create_default_data_set(ds_name))
+
+        # Register the default dataset pattern with the catalog
+        catalog = catalog.shallow_copy(
+            extra_dataset_patterns=self._extra_dataset_patterns
+        )
 
         if self._is_async:
             self._logger.info(
